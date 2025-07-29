@@ -1,0 +1,154 @@
+name: Build Containers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "containers/**"
+      - ".github/workflows/build-containers.yml"
+  pull_request:
+    paths:
+      - "containers/**"
+      - ".github/workflows/build-containers.yml"
+  workflow_dispatch:
+    inputs:
+      force_build_all:
+        description: "Force build all containers"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  detect-changes:
+    name: Detect Changed Containers
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      changed: ${{ steps.set-matrix.outputs.changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get changed containers
+        id: changed
+        uses: bjw-s-labs/action-changed-files@v0.3.3
+        with:
+          path: containers
+          include_only_directories: true
+          max_depth: 1
+
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          if [[ "${{ inputs.force_build_all }}" == "true" ]]; then
+            # Force build all containers
+            CONTAINERS=$(ls -d containers/*/ | xargs -n 1 basename)
+            CONTAINERS_JSON=$(echo "$CONTAINERS" | jq -R . | jq -s .)
+            echo "matrix=${CONTAINERS_JSON}" >> $GITHUB_OUTPUT
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            # Use detected changes
+            CHANGED='${{ steps.changed.outputs.changed_files }}'
+            if [[ "$CHANGED" == "[]" || -z "$CHANGED" ]]; then
+              echo "No containers to build"
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "matrix=[]" >> $GITHUB_OUTPUT
+            else
+              echo "Containers to build: $CHANGED"
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "matrix=${CHANGED}" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  build:
+    name: Build ${{ matrix.container }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        container: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image for testing
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/${{ matrix.container }}
+          push: false
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.container }}:test
+          cache-from: type=gha,scope=${{ matrix.container }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.container }}
+          load: true
+          platforms: linux/amd64 # Single platform for testing
+
+      - name: Run container structure tests
+        if: ${{ hashFiles(format('containers/{0}/tests.yaml', matrix.container)) != '' }}
+        run: |
+          # Install container-structure-test
+          curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+          chmod +x container-structure-test-linux-amd64
+          sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+
+          # Run tests
+          container-structure-test test \
+            --image ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.container }}:test \
+            --config ./containers/${{ matrix.container }}/tests.yaml
+
+      - name: Build and push multi-platform
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/${{ matrix.container }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.container }}:latest
+          cache-from: type=gha,scope=${{ matrix.container }}
+          platforms: linux/amd64,linux/arm64
+
+  summary:
+    name: Build Summary
+    if: always()
+    needs: [detect-changes, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## Container Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.detect-changes.outputs.changed }}" == "false" ]]; then
+            echo "✅ No containers needed building" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.build.result }}" == "success" || "${{ needs.build.result }}" == "skipped" ]]; then
+            echo "✅ All container builds completed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Built Containers:" >> $GITHUB_STEP_SUMMARY
+            echo '${{ needs.detect-changes.outputs.matrix }}' | jq -r '.[] | "- \(.)"' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some container builds failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Check the workflow logs for details." >> $GITHUB_STEP_SUMMARY
+          fi

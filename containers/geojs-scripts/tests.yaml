@@ -1,0 +1,25 @@
+schemaVersion: "2.0.0"
+
+fileExistenceTests:
+  - name: "Python executable"
+    path: /usr/local/bin/python
+    shouldExist: true
+  - name: "Requirements installed"
+    path: /usr/local/lib/python*/site-packages/
+    shouldExist: true
+
+commandTests:
+  - name: "Python version"
+    command: "python"
+    args: ["--version"]
+    exitCode: 0
+  - name: "Check imports"
+    command: "python"
+    args: ["-c", "import sys; print('Python imports working')"]
+    expectedOutput: ["Python imports working"]
+    exitCode: 0
+
+metadataTest:
+  env:
+    - key: "PATH"
+      value: ".*python.*"
