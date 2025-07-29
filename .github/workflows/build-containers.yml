@@ -96,7 +96,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build image for testing
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
         with:
           context: ./containers/${{ matrix.container }}
           push: false
@@ -121,7 +121,7 @@ jobs:
 
       - name: Build and push multi-platform
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
         with:
           context: ./containers/${{ matrix.container }}
           push: true
