@@ -20,6 +20,7 @@ commandTests:
     exitCode: 0
 
 metadataTest:
-  env:
+  envVars:
     - key: "PATH"
       value: ".*python.*"
+      isRegex: true
