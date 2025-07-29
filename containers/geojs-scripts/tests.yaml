@@ -34,4 +34,4 @@ metadataTest:
     - key: "PIP_NO_CACHE_DIR"
       value: "1"
   workdir: "/app"
-  user: "nobody"
+  user: "nobody:nogroup"
