@@ -4,8 +4,11 @@ fileExistenceTests:
   - name: "Python executable"
     path: /usr/local/bin/python
     shouldExist: true
-  - name: "Requirements installed"
-    path: /usr/local/lib/python*/site-packages/
+  - name: "Python3 executable"
+    path: /usr/local/bin/python3
+    shouldExist: true
+  - name: "Requirements file copied"
+    path: /requirements.txt
     shouldExist: true
 
 commandTests:
@@ -18,9 +21,17 @@ commandTests:
     args: ["-c", "import sys; print('Python imports working')"]
     expectedOutput: ["Python imports working"]
     exitCode: 0
+  - name: "Check pip installed"
+    command: "python"
+    args: ["-m", "pip", "--version"]
+    exitCode: 0
 
 metadataTest:
   envVars:
     - key: "PATH"
-      value: ".*python.*"
+      value: ".*/usr/local/bin.*"
       isRegex: true
+    - key: "PIP_NO_CACHE_DIR"
+      value: "1"
+  workdir: "/app"
+  user: "nobody"
