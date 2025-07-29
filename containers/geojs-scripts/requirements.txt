@@ -1,4 +1,4 @@
-cloudflare==2.11.8
+cloudflare==2.20.0
 psycopg2==2.9.10
 pandas==2.3.1
 tabulate==0.9.0
