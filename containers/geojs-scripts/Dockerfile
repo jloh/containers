@@ -1,6 +1,6 @@
 # synxtax=docker/dockerfile:1
 
-FROM python:3.13@sha256:20acba1d5a0baf779921a10a8118dfecb4fb50d5b60187e28709884c7ad839ad
+FROM python:3.13@sha256:6a9220edda062e9223ea0784740a535987299420b96fbfd520b89bbd3e772485
 
 ENV \
 	PIP_NO_CACHE_DIR=1
